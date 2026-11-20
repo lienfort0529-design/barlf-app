@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bar LF 数字管理</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#1c2233">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bar LF">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f3f1ec; --card:#fff; --ink:#1f2230; --sub:#6e6c78; --line:#e2ded5; --brand:#1c2233; --brand2:#b8923f; --soft:#ece6d6;
+    --good:#2f7d4f; --bad:#c0392b; --warn:#fdecea; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; -webkit-text-size-adjust:100%; }
+  header { position:sticky; top:0; z-index:5; background:var(--brand); color:#fff; padding:calc(12px + env(safe-area-inset-top)) 16px 12px; font-weight:700; display:flex; align-items:center; }
+  header #title { flex:1; }
+  header #title::before { content:'LF'; color:var(--brand2); font-family:Georgia,serif; margin-right:8px; }
+  header #who { font-weight:400; font-size:12px; opacity:.85; }
+  .login { max-width:360px; margin:40px auto; text-align:center; }
+  .login .logo { width:88px; height:88px; border-radius:22px; margin-bottom:8px; }
+  .login input { text-align:center; font-size:24px; letter-spacing:.3em; }
+  main { max-width:640px; margin:0 auto; padding:12px 12px 150px; }
+  nav { position:fixed; bottom:0; left:0; right:0; z-index:6; display:flex; background:#fff; border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
+  nav button { flex:1; border:0; background:none; padding:10px 0 12px; font-size:12px; color:var(--sub); }
+  nav button b { display:block; font-size:18px; line-height:1.2; }
+  nav button.on { color:var(--brand); font-weight:700; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .grow { flex:1; min-width:0; }
+  .sub { color:var(--sub); font-size:13px; }
+  .num { font-variant-numeric:tabular-nums; }
+  h2 { font-size:14px; color:var(--sub); margin:18px 4px 8px; font-weight:600; }
+  input, select { font:inherit; font-size:16px; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; width:100%; color:var(--ink); }
+  label { display:block; font-size:13px; color:var(--sub); margin:10px 0 4px; }
+  .btn { font:inherit; border:0; border-radius:10px; padding:11px 14px; background:var(--brand); color:#fff; font-weight:700; }
+  .btn.sec { background:var(--soft); color:var(--brand); }
+  .btn.del { background:none; color:var(--bad); }
+  .btn.wide { width:100%; }
+  .btn:disabled { opacity:.5; }
+  .chip { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:700; background:#e8f3ec; color:var(--good); }
+  .chip.bad { background:var(--warn); color:var(--bad); }
+  .chip.off { background:#eee; color:#888; }
+  .chip.card { background:#e7ecf7; color:#2c4a8a; }
+  .menu-item { display:flex; gap:10px; align-items:center; cursor:pointer; }
+  .menu-item .stats { text-align:right; font-size:13px; }
+  .over { border-color:#f1b5ad; background:#fffafa; }
+  .toolbar { display:flex; gap:8px; margin-bottom:8px; }
+  .toolbar select, .toolbar input { flex:1; }
+  .kpi { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  .kpi div { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  .kpi small { display:block; color:var(--sub); font-size:12px; }
+  .kpi strong { font-size:19px; }
+  .kpi .big { grid-column:1 / -1; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:6px 4px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; white-space:normal; }
+  th { color:var(--sub); font-weight:600; }
+  .bar { height:8px; background:var(--brand2); border-radius:4px; }
+  .qty { display:flex; align-items:center; gap:6px; }
+  .qty button { width:38px; height:38px; border-radius:50%; border:1px solid var(--line); background:#fff; font-size:20px; color:var(--brand); }
+  .qty input { width:52px; text-align:center; padding:7px 4px; }
+  .has { border-color:var(--brand2); background:#fffbf1; }
+  .footer-bar { position:fixed; left:0; right:0; bottom:calc(58px + env(safe-area-inset-bottom)); z-index:5; background:#fff; border-top:1px solid var(--line); padding:10px 12px; }
+  .footer-bar > div, .mfoot > div { max-width:640px; margin:0 auto; }
+  #modal { position:fixed; inset:0; z-index:10; background:var(--bg); overflow:auto; display:none; }
+  #modal.open { display:block; }
+  #modal .head { position:sticky; top:0; z-index:2; background:var(--brand); color:#fff; padding:calc(10px + env(safe-area-inset-top)) 12px 10px; display:flex; align-items:center; gap:8px; }
+  #modal .head button { background:none; border:0; color:#fff; font:inherit; font-size:15px; }
+  #modal .body { max-width:640px; margin:0 auto; padding:12px 12px 140px; }
+  .mfoot { position:fixed; left:0; right:0; bottom:0; z-index:11; background:#fff; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .line { display:grid; grid-template-columns:1fr 84px 34px; gap:6px; align-items:center; margin-bottom:6px; }
+  .line .x { border:0; background:none; color:var(--bad); font-size:20px; }
+  .line-cost { grid-column:1 / -1; font-size:12px; color:var(--sub); margin:-2px 0 6px 4px; }
+  .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; text-align:center; }
+  .summary small { display:block; font-size:11px; color:var(--sub); }
+  .summary strong { font-size:16px; }
+  #toast { position:fixed; left:50%; top:60px; transform:translateX(-50%); background:#333; color:#fff; padding:9px 16px; border-radius:99px; font-size:14px; z-index:20; display:none; max-width:90%; }
+  #loading { position:fixed; inset:0; background:rgba(255,255,255,.6); z-index:30; display:none; align-items:center; justify-content:center; font-weight:700; color:var(--brand); }
+  .seg { display:flex; gap:6px; }
+  .seg button { flex:1; border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 0; font:inherit; font-size:14px; color:var(--ink); }
+  .seg button.on { border-color:var(--brand); background:var(--brand); color:#fff; font-weight:700; }
+  .slip { cursor:pointer; }
+  .slip .items { font-size:13px; color:var(--sub); margin-top:2px; }
+  .chartbox { position:relative; height:220px; }
+  .note { font-size:12px; color:var(--sub); margin-top:6px; }
+  .up { color:var(--good); } .down { color:var(--bad); }
+  .empty { text-align:center; color:var(--sub); padding:30px 10px; }
+</style>
+</head>
+<body>
+<header><span id="title">Bar LF</span><span id="who"></span></header>
+<main id="main"></main>
+<nav id="nav"></nav>
+<div id="modal"></div>
+<div id="toast"></div>
+<div id="loading">読み込み中…</div>
+
+<script>
+// Apps Script を「ウェブアプリ」で公開したときの URL（/exec で終わるもの）
+const API_URL = 'https://script.google.com/macros/s/AKfycbzn5OnJj6pM8dGyV7rumXB_QIREewoVr-I9kPAjFZV_fQbaZIf_fVgEnopyvyjMPBiQyw/exec';
+const ALL_TABS = [['slip','🧾','伝票'],['report','📊','集計'],['menu','🍸','メニュー'],['mat','📦','仕入れ'],['set','⚙️','設定']];
+const STAFF_TABS = ['slip', 'report', 'set'];
+const TOKEN_KEY = 'barlf_token';
+let TABS = ALL_TABS;
+const isOwner = () => D && D.me && D.me.role === 'owner';
+const UNITS = ['ml','g','個'];
+const MAT_CATS = ['ウイスキー','焼酎・日本酒','ビール','ワイン','スピリッツ・リキュール','割り材・氷','フード材料','消耗品','その他'];
+let D = null, tab = 'slip', menuFilter = 'active', menuSort = 'cat', menuQuery = '';
+let dayDate = null, day = null, reportMonth = null, purMonth = null, purList = [];
+
+// ===== 共通 =====
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yenD = (n, d) => { const v = Math.round(Math.abs(n || 0) * 10 ** d) / 10 ** d; return (n < 0 && v ? '−¥' : '¥') + v.toLocaleString(undefined, { maximumFractionDigits: d }); };
+const yen = n => yenD(n, 0);
+const yen1 = n => yenD(n, 1);
+const yenU = n => yenD(n, 2); // 材料の単価（1ml・1gあたり）
+const pct = n => isFinite(n) ? (Math.round(n * 1000) / 10).toFixed(1) + '%' : '―';
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 2500); }
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },
+};
+async function call(fn, ...args) {
+  $('#loading').style.display = 'flex';
+  try {
+    // text/plain で送ると Apps Script でもブラウザの事前確認（CORS）が要らない
+    const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn, args, token: store.get(TOKEN_KEY) }) });
+    const r = await res.json();
+    if (r.ok) return r.data;
+    if (r.code === 'auth') { store.set(TOKEN_KEY, null); showLogin(); }
+    else alert(r.error);
+    throw new Error(r.error);
+  } catch (e) {
+    if (e instanceof TypeError) alert('通信できませんでした。電波を確認してください');
+    throw e;
+  } finally { $('#loading').style.display = 'none'; }
+}
+
+// ===== 計算 =====
+const taxRate = () => 1 + (D.settings['消費税率'] || 0);
+const target = () => D.settings['目標原価率'] || 0.25;
+const matById = id => D.materials.find(m => m.id === id);
+const unitPrice = m => m && m.amount > 0 ? m.price / m.amount : 0;
+const costOf = (lines, override) => (lines || []).reduce((a, l) => {
+  const m = matById(l.matId);
+  return a + (Number(l.qty) || 0) * (override && override.id === l.matId ? unitPrice(override) : unitPrice(m));
+}, 0);
+function metrics(price, cost) {
+  const ex = price / taxRate(), gross = ex - cost;
+  return { ex, cost, gross, costRate: ex > 0 ? cost / ex : NaN, grossRate: ex > 0 ? gross / ex : NaN };
+}
+const menuMetrics = m => metrics(m.price, costOf(D.recipes[m.id]));
+const cats = list => [...new Set(list.map(x => x.cat || 'その他'))];
+
+// ===== 画面切り替え =====
+function renderNav() {
+  TABS = isOwner() ? ALL_TABS : ALL_TABS.filter(t => STAFF_TABS.includes(t[0]));
+  $('#who').textContent = D && D.me ? D.me.name + (isOwner() ? '（オーナー）' : '') : '';
+  $('#nav').innerHTML = TABS.map(([k, i, n]) => `<button class="${k === tab ? 'on' : ''}" onclick="go('${k}')"><b>${i}</b>${n}</button>`).join('');
+}
+function go(k) {
+  tab = k;
+  $('#title').textContent = TABS.find(t => t[0] === k)[2];
+  renderNav(); window.scrollTo(0, 0); render();
+}
+function render() {
+  ({ slip: renderDay, menu: renderMenus, report: renderReport, mat: renderMats, set: renderSettings })[tab]();
+}
+function openModal(title, html, foot) {
+  const m = $('#modal');
+  m.innerHTML = `<div class="head"><button onclick="closeModal()">‹ 戻る</button><div class="grow" style="font-weight:700">${esc(title)}</div></div><div class="body">${html}</div>`
+    + (foot ? `<div class="mfoot"><div>${foot}</div></div>` : '');
+  m.classList.add('open'); m.scrollTop = 0;
+}
+function closeModal() { $('#modal').classList.remove('open'); $('#modal').innerHTML = ''; }
+
+// ===== 伝票（1日の一覧） =====
+async function loadDay(date) {
+  day = await call('getDay', date); dayDate = date; renderDay();
+}
+function renderDay() {
+  if (!day || day.date !== dayDate) return loadDay(dayDate || D.today);
+  const s = day.slips, sum = k => s.reduce((a, x) => a + x[k], 0);
+  const cash = s.filter(x => x.pay !== 'カード').reduce((a, x) => a + x.total, 0), card = sum('total') - cash;
+  const guests = sum('guests');
+  $('#main').innerHTML = `
+    <div class="row"><input type="date" value="${dayDate}" onchange="loadDay(this.value)">
+      <button class="btn sec" onclick="loadDay('${D.today}')" style="white-space:nowrap">今日</button></div>
+    <div class="note">営業日：${D.settings['営業日の切り替え時刻']}時より前の会計は前の日の売上に入ります</div>
+    <div class="kpi num" style="margin-top:10px">
+      <div class="big"><small>この日の売上（税込）</small><strong>${yen(sum('total'))}</strong>
+        <small>飲食代 ${yen(sum('food'))}　サービス料 ${yen(sum('service'))}</small></div>
+      <div><small>💴 現金</small><strong>${yen(cash)}</strong></div>
+      <div><small>💳 カード</small><strong>${yen(card)}</strong></div>
+      <div><small>組数・客数</small><strong>${s.length}組 ${guests}人</strong></div>
+      <div><small>客単価</small><strong>${guests ? yen(sum('total') / guests) : '―'}</strong></div>
+    </div>
+    <h2>伝票（${s.length}件）</h2>
+    ${s.length ? s.map(x => `<div class="card slip" onclick="editSlip('${x.id}')">
+      <div class="row"><b class="num">${esc(x.time)}</b><span class="sub">${x.guests}名・担当 ${esc(x.staffName)}</span>
+        <span class="grow"></span><span class="chip ${x.pay === 'カード' ? 'card' : ''}">${esc(x.pay)}</span><b class="num">${yen(x.total)}</b></div>
+      <div class="items">${x.items.map(i => esc(i.name) + (i.qty > 1 ? '×' + i.qty : '')).join('、')}${x.memo ? '　📝' + esc(x.memo) : ''}</div></div>`).join('')
+      : '<div class="empty">この日の伝票はまだありません</div>'}
+    <div class="footer-bar"><div><button class="btn wide" onclick="editSlip()">＋ 新しい伝票</button></div></div>`;
+}
+
+// ===== 伝票の入力 =====
+let sl = null, slQuery = '';
+function editSlip(id) {
+  const x = id ? day.slips.find(s => s.id === id) : null;
+  sl = x ? { id: x.id, date: x.date, guests: x.guests, staffId: x.staffId, pay: x.pay, memo: x.memo || '', rate: x.rate,
+      qty: Object.fromEntries(x.items.map(i => [i.menuId, i.qty])), old: Object.fromEntries(x.items.map(i => [i.menuId, i])) }
+    : { id: null, date: dayDate, guests: 1, staffId: D.me.id, pay: '', memo: '', rate: D.settings['サービス料率'] || 0, qty: {}, old: {} };
+  slQuery = '';
+  const staff = D.staff.slice();
+  if (x && !staff.some(u => u.id === x.staffId)) staff.push({ id: x.staffId, name: x.staffName + '（停止中）' });
+  openModal(x ? `伝票を修正（${x.time}）` : '新しい伝票', `
+    <div class="row">
+      <div style="width:150px"><label style="margin-top:0">人数</label><div class="qty"><button onclick="slGuests(-1)">−</button><input id="sGuests" type="number" inputmode="numeric" value="${sl.guests}" oninput="sl.guests=Number(this.value)||0"><button onclick="slGuests(1)">＋</button></div></div>
+      <div class="grow"><label style="margin-top:0">担当</label><select onchange="sl.staffId=this.value">${staff.map(u => `<option value="${u.id}" ${u.id === sl.staffId ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
+    </div>
+    <h2>注文</h2>
+    <input placeholder="🔍 メニューを探す" oninput="slQuery=this.value;drawSlipMenus()" style="margin-bottom:8px">
+    <div id="slMenus"></div>
+    <h2>お会計</h2>
+    <div class="card">
+      <label style="margin-top:0">支払い</label><div class="seg" id="slPay"></div>
+      <label>メモ</label><input value="${esc(sl.memo)}" placeholder="例：〇〇様、ボトルキープ" oninput="sl.memo=this.value">
+      ${id ? '' : '<div class="row" style="margin-top:6px"><span class="sub grow">営業日</span><input type="date" style="width:170px" value="' + sl.date + '" onchange="sl.date=this.value"></div>'}
+    </div>
+    ${x ? `<div class="row" style="margin-top:4px"><span class="sub grow">営業日を直す</span><input type="date" style="width:170px" value="${sl.date}" onchange="sl.date=this.value"></div>
+      <button class="btn del wide" style="margin-top:10px" onclick="delSlip('${x.id}')">この伝票を削除</button>` : ''}`,
+    `<div class="row"><div class="grow num" id="slTotal"></div><button class="btn" onclick="saveSlipEd()">${x ? '修正する' : '会計を保存'}</button></div>`);
+  drawSlipMenus(); drawPay(); updSlip();
+}
+function slGuests(d) { sl.guests = Math.max(0, (Number(sl.guests) || 0) + d); $('#sGuests').value = sl.guests; }
+// 伝票に出すメニュー：販売中のもの＋この伝票にすでにある品（休止・削除されたものも）
+function slipMenus() {
+  const list = D.menus.filter(m => m.active || sl.qty[m.id]).map(m => ({ id: m.id, name: m.name, cat: m.cat, price: sl.old[m.id] ? sl.old[m.id].price : m.price }));
+  Object.values(sl.old).forEach(i => { if (!list.some(m => m.id === i.menuId)) list.push({ id: i.menuId, name: i.name, cat: '以前のメニュー', price: i.price }); });
+  return list;
+}
+function drawSlipMenus() {
+  const q = slQuery.trim();
+  const list = slipMenus().filter(m => !q || (m.name + (m.cat || '')).includes(q));
+  $('#slMenus').innerHTML = list.length ? cats(list).map(c => `<h2>${esc(c)}</h2>` + list.filter(m => (m.cat || 'その他') === c).map(m => `
+    <div class="card row ${sl.qty[m.id] ? 'has' : ''}" id="sm_${m.id}"><div class="grow"><div style="font-weight:700">${esc(m.name)}</div><div class="sub num">${yen(m.price)}</div></div>
+      <div class="qty"><button onclick="addSlQty('${m.id}',-1)">−</button><input id="sq_${m.id}" type="number" inputmode="numeric" value="${sl.qty[m.id] || ''}" placeholder="0" oninput="setSlQty('${m.id}',this.value)"><button onclick="addSlQty('${m.id}',1)">＋</button></div></div>`).join('')).join('')
+    : `<div class="empty">${D.menus.length ? '見つかりません' : 'メニューがまだありません。オーナーが「メニュー」タブで登録してください'}</div>`;
+}
+function drawPay() {
+  $('#slPay').innerHTML = ['現金', 'カード'].map(p => `<button class="${sl.pay === p ? 'on' : ''}" onclick="sl.pay='${p}';drawPay()">${p === '現金' ? '💴' : '💳'} ${p}</button>`).join('');
+}
+function setSlQty(id, v) {
+  sl.qty[id] = Math.max(0, Math.floor(Number(v) || 0));
+  const el = $('#sm_' + id); if (el) el.classList.toggle('has', sl.qty[id] > 0);
+  updSlip();
+}
+function addSlQty(id, d) { setSlQty(id, (sl.qty[id] || 0) + d); $('#sq_' + id).value = sl.qty[id] || ''; }
+function slipCalc() {
+  const price = Object.fromEntries(slipMenus().map(m => [m.id, m.price]));
+  let n = 0, food = 0;
+  Object.entries(sl.qty).forEach(([id, q]) => { if (q > 0 && id in price) { n += q; food += q * price[id]; } });
+  const service = Math.round(food * sl.rate);
+  return { n, food, service, total: food + service };
+}
+function updSlip() {
+  const c = slipCalc();
+  $('#slTotal').innerHTML = `<div class="sub">${c.n}品　飲食代 ${yen(c.food)}${sl.rate ? `＋サービス料${pct(sl.rate)} ${yen(c.service)}` : ''}</div><b style="font-size:18px">合計 ${yen(c.total)}</b>`;
+}
+async function saveSlipEd() {
+  if (!slipCalc().n) return alert('注文を1つ以上入れてください');
+  if (!sl.pay) return alert('支払い（現金・カード）を選んでください');
+  if (!sl.date) return alert('営業日を入れてください');
+  const items = Object.keys(sl.qty).filter(id => sl.qty[id] > 0).map(id => ({ menuId: id, qty: sl.qty[id] }));
+  const r = await call('saveSlip', { id: sl.id, date: sl.date, guests: sl.guests, staffId: sl.staffId, pay: sl.pay, memo: sl.memo, items });
+  day = r; dayDate = r.date; closeModal(); renderDay(); toast(sl.id ? '修正しました' : '会計を保存しました');
+}
+async function delSlip(id) {
+  if (!confirm('この伝票を削除しますか？（元に戻せません）')) return;
+  day = await call('deleteSlip', id); closeModal(); renderDay(); toast('削除しました');
+}
+
+// ===== メニュー一覧 =====
+function renderMenus() {
+  let list = D.menus.filter(m => menuFilter === 'all' || (menuFilter === 'active') === m.active);
+  if (menuQuery) list = list.filter(m => (m.name + m.cat).includes(menuQuery));
+  const rows = list.map(m => ({ m, k: menuMetrics(m) }));
+  if (menuSort === 'rate') rows.sort((a, b) => (b.k.costRate || 0) - (a.k.costRate || 0));
+  if (menuSort === 'gross') rows.sort((a, b) => b.k.gross - a.k.gross);
+  const over = rows.filter(r => r.k.costRate > target()).length;
+  const item = ({ m, k }) => `<div class="card menu-item ${k.costRate > target() ? 'over' : ''}" onclick="editMenu('${m.id}')">
+      <div class="grow"><div style="font-weight:700">${esc(m.name)} ${m.active ? '' : '<span class="chip off">休止</span>'}</div>
+        <div class="sub num">売価 ${yen(m.price)}　原価 ${yen1(k.cost)}</div></div>
+      <div class="stats num"><span class="chip ${k.costRate > target() ? 'bad' : ''}">原価率 ${pct(k.costRate)}</span>
+        <div>粗利 <b>${yen(k.gross)}</b>（${pct(k.grossRate)}）</div></div></div>`;
+  let body;
+  if (!D.menus.length) body = `<div class="empty">まだメニューがありません。<br>先に「仕入れ」タブで酒・食材を登録してから、メニューを追加してください。</div>`;
+  else if (menuSort === 'cat') body = cats(rows.map(r => r.m)).map(c => `<h2>${esc(c)}</h2>` + rows.filter(r => (r.m.cat || 'その他') === c).map(item).join('')).join('');
+  else body = rows.map(item).join('');
+  $('#main').innerHTML = `
+    <div class="toolbar"><input placeholder="🔍 メニュー名で探す" value="${esc(menuQuery)}" oninput="menuQuery=this.value;renderMenuListOnly()"></div>
+    <div class="toolbar">
+      <select onchange="menuFilter=this.value;render()">${[['active','販売中'],['off','休止中'],['all','すべて']].map(([v, n]) => `<option value="${v}" ${v === menuFilter ? 'selected' : ''}>${n}（${D.menus.filter(m => v === 'all' || (v === 'active') === m.active).length}品）</option>`).join('')}</select>
+      <select onchange="menuSort=this.value;render()">${[['cat','カテゴリ順'],['rate','原価率が高い順'],['gross','粗利が多い順']].map(([v, n]) => `<option value="${v}" ${v === menuSort ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    </div>
+    ${over ? `<div class="card over sub">⚠️ 目標原価率 ${pct(target())} を超えているメニューが <b style="color:var(--bad)">${over}品</b> あります</div>` : ''}
+    <div id="menuList">${body}</div>
+    <button class="btn wide" style="margin-top:8px" onclick="editMenu()">＋ メニューを追加</button>`;
+}
+function renderMenuListOnly() { render(); const i = $('#main input'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+
+// ===== メニュー編集 =====
+let ed = null;
+function editMenu(id, copyFrom) {
+  const src = D.menus.find(m => m.id === (id || copyFrom));
+  ed = { menu: src ? { ...src } : { name: '', cat: '', price: 0, active: true }, lines: ((src && D.recipes[src.id]) || []).map(l => ({ ...l })) };
+  if (copyFrom) { ed.menu.id = null; ed.menu.name += '（コピー）'; }
+  if (!ed.lines.length) ed.lines.push({ matId: '', qty: '' });
+  const isNew = !ed.menu.id;
+  openModal(isNew ? 'メニューを追加' : 'メニューを編集', `
+    <div class="card"><div class="summary num" id="sum"></div></div>
+    <label>メニュー名</label><input id="mName" value="${esc(ed.menu.name)}" placeholder="例：ハイボール">
+    <div class="row"><div class="grow"><label>カテゴリ</label><input id="mCat" list="catList" value="${esc(ed.menu.cat)}" placeholder="例：ウイスキー">
+      <datalist id="catList">${cats(D.menus).map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div class="grow"><label>売価（税込・円）</label><input id="mPrice" type="number" inputmode="numeric" value="${ed.menu.price || ''}" oninput="updEd()"></div></div>
+    <label>状態</label><select id="mActive"><option value="1">販売中</option><option value="0" ${ed.menu.active ? '' : 'selected'}>休止（メニューから外す）</option></select>
+    <h2>レシピ（1杯に使う量）</h2>
+    <div id="lines"></div>
+    <button class="btn sec wide" onclick="ed.lines.push({matId:'',qty:''});drawLines()">＋ 材料を追加</button>
+    ${D.materials.length ? '' : '<div class="sub" style="margin-top:6px">※ 酒・食材が未登録です。「仕入れ」タブで先に登録してください。</div>'}
+    <div class="note">例：ハイボール ＝ ウイスキー 30ml ＋ 炭酸水 120ml ＋ 氷 1個。チャージやお通しもメニューとして作れます</div>
+    <h2>売価シミュレーション</h2>
+    <div class="card"><label style="margin-top:0">この売価にしたら（税込・円）</label><input id="sim" type="number" inputmode="numeric" placeholder="例：800" oninput="updEd()"><div id="simOut" class="sub num" style="margin-top:6px"></div></div>
+    <button class="btn wide" onclick="saveMenuEd()">保存する</button>
+    ${isNew ? '' : `<div class="row" style="margin-top:10px"><button class="btn sec grow" onclick="editMenu(null,'${ed.menu.id}')">複製して新しく作る</button><button class="btn del" onclick="delMenu('${ed.menu.id}')">削除</button></div>`}`);
+  drawLines();
+}
+function matOptions(sel) {
+  return `<option value="">材料を選ぶ</option>` + cats(D.materials).map(c => `<optgroup label="${esc(c)}">` +
+    D.materials.filter(m => (m.cat || 'その他') === c).map(m => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('') + '</optgroup>').join('');
+}
+function drawLines() {
+  $('#lines').innerHTML = ed.lines.map((l, i) => {
+    const m = matById(l.matId);
+    return `<div class="line"><select onchange="ed.lines[${i}].matId=this.value;drawLines()">${matOptions(l.matId)}</select>
+      <input type="number" inputmode="decimal" placeholder="${m ? m.unit : '量'}" value="${l.qty}" oninput="ed.lines[${i}].qty=this.value;updEd()">
+      <button class="x" onclick="ed.lines.splice(${i},1);drawLines()">×</button>
+      <div class="line-cost num" id="lc${i}"></div></div>`;
+  }).join('');
+  updEd();
+}
+function updEd() {
+  const price = Number($('#mPrice').value) || 0, cost = costOf(ed.lines), k = metrics(price, cost);
+  ed.lines.forEach((l, i) => { const m = matById(l.matId), el = $('#lc' + i);
+    if (el) el.textContent = m ? `${l.qty || 0}${m.unit} × ${yenU(unitPrice(m))}/${m.unit} = ${yen1((Number(l.qty) || 0) * unitPrice(m))}` : ''; });
+  $('#sum').innerHTML = `<div><small>原価</small><strong>${yen1(cost)}</strong></div>
+    <div><small>原価率</small><strong style="color:${k.costRate > target() ? 'var(--bad)' : 'var(--good)'}">${pct(k.costRate)}</strong></div>
+    <div><small>粗利</small><strong>${yen(k.gross)}</strong></div><div><small>粗利率</small><strong>${pct(k.grossRate)}</strong></div>`;
+  const sim = Number($('#sim').value), need = Math.ceil(cost * taxRate() / target() / 10) * 10;
+  $('#simOut').innerHTML = (sim > 0 ? (() => { const s = metrics(sim, cost); return `原価率 <b>${pct(s.costRate)}</b>　粗利 <b>${yen(s.gross)}</b>（${pct(s.grossRate)}）<br>` + (price ? `今の売価より 1杯あたり ${yen(s.gross - k.gross)} ${s.gross >= k.gross ? '増えます' : '減ります'}<br>` : ''); })() : '')
+    + (cost > 0 ? `目標原価率 ${pct(target())} にするには 売価 <b>${yen(need)}</b> 以上（税込）` : '');
+}
+async function saveMenuEd() {
+  const menu = { id: ed.menu.id, name: $('#mName').value.trim(), cat: $('#mCat').value.trim(), price: Number($('#mPrice').value) || 0, active: $('#mActive').value === '1' };
+  if (!menu.name) return alert('メニュー名を入れてください');
+  D = await call('saveMenu', menu, ed.lines.filter(l => l.matId && Number(l.qty) > 0));
+  closeModal(); render(); toast('保存しました');
+}
+async function delMenu(id) {
+  if (!confirm('このメニューを削除しますか？\n（過去の伝票は残ります。一時的に出さないだけなら「休止」がおすすめです）')) return;
+  D = await call('deleteMenu', id); closeModal(); render(); toast('削除しました');
+}
+
+// ===== 集計 =====
+const ymShift = (ym, k) => { const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1 + k, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+const daysIn = ym => new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)), 0).getDate();
+const ymLabel = ym => Number(ym.slice(5)) + '月';
+const DOW = ['日', '月', '火', '水', '木', '金', '土'];
+const dow = date => new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8))).getDay();
+let charts = {};
+function chart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  const el = document.getElementById(id);
+  if (!el || !window.Chart) return;
+  cfg.options = Object.assign({ responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+    scales: { y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => Math.abs(v) >= 10000 ? v / 10000 + '万' : v.toLocaleString() } }, x: { ticks: { font: { size: 10 } } } } }, cfg.options || {});
+  charts[id] = new Chart(el, cfg);
+}
+function sumDays(days, ym, upTo) {
+  const s = { total: 0, food: 0, service: 0, cost: 0, labor: 0, slips: 0, guests: 0, cash: 0, card: 0, n: 0 };
+  days.forEach(d => {
+    if (d.date.slice(0, 7) !== ym || (upTo && Number(d.date.slice(8)) > upTo) || !(d.total > 0)) return;
+    ['total', 'food', 'service', 'cost', 'labor', 'slips', 'guests', 'cash', 'card'].forEach(k => s[k] += d[k]); s.n++;
+  });
+  s.ex = s.total / taxRate(); s.gross = s.ex - s.cost; s.profit = s.gross - s.labor; // 粗利 − 人件費（固定費の前）
+  return s;
+}
+const diff = (a, b) => b > 0 ? `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '+' : ''}${pct(a / b - 1)}</span>` : '<span class="sub">比較データなし</span>';
+function avgBy(days, keyFn, keys) {
+  const g = {};
+  days.filter(d => d.total > 0).forEach(d => { const k = keyFn(d); (g[k] = g[k] || []).push(d.total); });
+  return keys.map(k => ({ k, n: (g[k] || []).length, avg: g[k] ? g[k].reduce((a, b) => a + b, 0) / g[k].length : 0 }));
+}
+// 販売中メニューの平均原価率（伝票がまだない月の損益分岐点に使う）
+function menuAvgRate() {
+  const k = D.menus.filter(m => m.active).map(menuMetrics).filter(x => isFinite(x.costRate));
+  return k.length ? k.reduce((a, x) => a + x.costRate, 0) / k.length : 0;
+}
+
+async function renderReport() {
+  if (!reportMonth) reportMonth = D.today.slice(0, 7);
+  const r = await call('getReport', reportMonth);
+  if (tab !== 'report') return;
+  const ym = reportMonth, t = taxRate(), dim = daysIn(ym), bizDays = D.settings['月の営業日数'] || 24;
+  const all = r.days, fixed = D.fixed.reduce((a, f) => a + f.amount, 0), own = isOwner();
+  const cur = sumDays(all, ym), op = cur.profit - fixed;
+  const upTo = ym === D.today.slice(0, 7) ? Number(D.today.slice(8)) : dim;
+  const curTo = sumDays(all, ym, upTo), prev = sumDays(all, ymShift(ym, -1), upTo), lastY = sumDays(all, ymShift(ym, -12), upTo);
+  // 損益分岐点（税込の売上）：固定費 ÷（売上から原価と人件費を引いて残る割合）
+  const sr = D.settings['サービス料率'] || 0, lr = D.settings['人件費率'] || 0;
+  const keepRate = cur.ex > 0 ? cur.profit / cur.ex : 1 - (menuAvgRate() + lr * t) / (1 + sr);
+  const be = own && fixed > 0 && keepRate > 0 ? fixed / keepRate * t : null, beDay = be ? be / bizDays : null;
+  const recent = all.filter(d => d.date.slice(0, 7) >= ymShift(ym, -2) && d.date.slice(0, 7) <= ym);
+  const byDow = avgBy(recent, d => dow(d.date), [1, 2, 3, 4, 5, 6, 0]);
+  const months = [-5, -4, -3, -2, -1, 0].map(k => ymShift(ym, k)), mSum = months.map(m => sumDays(all, m));
+  const menus = r.menus.map(m => Object.assign(m, { ex: m.sales / t })).sort((a, b) => (b.ex - b.cost) - (a.ex - a.cost));
+  const monthDays = all.filter(d => d.date.slice(0, 7) === ym && d.total > 0);
+  const pur = r.purchases[ym] || 0;
+  const staff = r.staff.sort((a, b) => b.food - a.food);
+
+  $('#main').innerHTML = `
+    <label style="margin-top:0">月</label><input type="month" value="${ym}" onchange="reportMonth=this.value;render()">
+    <h2>${ymLabel(ym)}の数字</h2>
+    <div class="kpi num">
+      <div class="big"><small>売上（税込）</small><strong>${yen(cur.total)}</strong>
+        <small>飲食代 ${yen(cur.food)}　サービス料 ${yen(cur.service)}　税抜 ${yen(cur.ex)}・${cur.n}日営業</small></div>
+      <div><small>組数・客数</small><strong>${cur.slips}組 ${cur.guests}人</strong><small>1日 平均${cur.n ? (cur.guests / cur.n).toFixed(1) : '―'}人</small></div>
+      <div><small>客単価</small><strong>${cur.guests ? yen(cur.total / cur.guests) : '―'}</strong><small>1組 ${cur.slips ? yen(cur.total / cur.slips) : '―'}</small></div>
+      <div><small>💴 現金</small><strong>${yen(cur.cash)}</strong></div>
+      <div><small>💳 カード</small><strong>${yen(cur.card)}</strong></div>
+      ${own ? `<div><small>原価（酒・食材）</small><strong>${yen(cur.cost)}</strong><small>原価率 ${pct(cur.ex ? cur.cost / cur.ex : NaN)}</small></div>
+      <div><small>実際の仕入れ</small><strong>${yen(pur)}</strong><small>${pur ? `原価との差 ${yen(pur - cur.cost)}` : '「仕入れ」タブで記録'}</small></div>
+      <div><small>人件費（担当売上×${pct(lr)}）</small><strong>${yen(cur.labor)}</strong><small>売上比 ${pct(cur.ex ? cur.labor / cur.ex : NaN)}</small></div>
+      <div><small>固定費</small><strong>${yen(fixed)}</strong><small>設定タブで変更</small></div>
+      <div class="big"><small>営業利益（税抜売上 − 原価 − 人件費 − 固定費）</small><strong class="${op >= 0 ? 'up' : 'down'}">${yen(op)}</strong>
+        <small>利益率 ${pct(cur.ex ? op / cur.ex : NaN)}</small></div>` : ''}
+      <div class="big"><small>${upTo < dim ? `1日〜${upTo}日の比較（税込）` : '前月・前年との比較（税込）'}</small>
+        <div class="row"><span class="grow">前月同期 ${yen(prev.total)}</span>${diff(curTo.total, prev.total)}</div>
+        <div class="row"><span class="grow">前年同月 ${yen(lastY.total)}</span>${diff(curTo.total, lastY.total)}</div></div>
+      ${own ? `<div class="big"><small>損益分岐点（黒字になる売上・税込）</small>${be ? `<strong>月 ${yen(be)}</strong>（1日 約${yen(beDay)}・営業${bizDays}日）
+        <div style="margin-top:4px">${cur.total >= be ? `<span class="chip">達成 ＋${yen(cur.total - be)}</span>` : `<span class="chip bad">あと ${yen(be - cur.total)}</span>`}
+        <span class="sub">売上の ${pct(keepRate)} が残る計算${cur.ex ? '' : '（メニュー平均）'}</span></div>
+        <div style="background:#eee;border-radius:4px;margin-top:6px"><div class="bar" style="width:${Math.min(100, cur.total / be * 100)}%"></div></div>`
+        : '<span class="sub">固定費を「設定」タブに入れると表示されます</span>'}</div>` : ''}
+    </div>
+    ${own && pur ? '<div class="note">「原価」は伝票の注文とレシピから計算した本来の原価。「実際の仕入れ」との差は、在庫の増減・サービスで出した分・ロスの目安です</div>' : ''}
+    <h2>日別の売上（税込）</h2>
+    <div class="card"><div class="chartbox"><canvas id="cDaily"></canvas></div>${beDay ? '<div class="note">点線＝1日の黒字ライン（損益分岐点 ÷ 営業日数）。下回った日は赤</div>' : ''}</div>
+    <h2>累計売上（${own ? '黒字ライン・' : ''}前月・前年と比べる）</h2>
+    <div class="card"><div class="chartbox"><canvas id="cCum"></canvas></div></div>
+    <h2>曜日別の平均売上（直近3か月）</h2>
+    <div class="card"><div class="chartbox"><canvas id="cDow"></canvas></div></div>
+    <h2>直近6か月の推移（税抜）</h2>
+    <div class="card"><div class="chartbox"><canvas id="cTrend"></canvas></div></div>
+    ${own ? `<h2>スタッフ別（担当した伝票）</h2>
+    <div class="card">${staff.length ? `<table class="num"><tr><th>担当</th><th>伝票</th><th>飲食代</th><th>人件費</th></tr>
+      ${staff.map(s => `<tr><td>${esc(s.name)}</td><td>${s.slips}</td><td>${yen(s.food)}</td><td>${s.labor ? yen(s.labor) : '―'}</td></tr>`).join('')}
+      <tr><td><b>合計</b></td><td>${cur.slips}</td><td>${yen(cur.food)}</td><td><b>${yen(cur.labor)}</b></td></tr></table>
+      <div class="note">人件費＝担当した伝票の飲食代（サービス料は除く）× ${pct(lr)}。オーナー担当の伝票は0</div>` : '<div class="empty">この月の伝票はありません</div>'}</div>` : ''}
+    <h2>メニュー別（${own ? '粗利' : '売上'}が多い順）</h2>
+    <div class="card">${menus.length ? `<table class="num"><tr><th>メニュー</th><th>杯数</th><th>売上</th>${own ? '<th>原価率</th><th>粗利</th>' : ''}</tr>
+      ${menus.map(m => `<tr><td>${esc(m.name)}</td><td>${m.qty}</td><td>${yen(m.ex)}</td>${own ? `<td>${pct(m.ex ? m.cost / m.ex : NaN)}</td><td>${yen(m.ex - m.cost)}</td>` : ''}</tr>`).join('')}</table>
+      <div class="note">売上は税抜・サービス料を除いた額</div>` : '<div class="empty">この月の伝票はありません</div>'}</div>
+    <h2>日別の一覧</h2>
+    <div class="card">${monthDays.length ? `<table class="num"><tr><th>日付</th><th>組/人</th><th>売上(税込)</th>${own ? '<th>利益*</th>' : ''}</tr>
+      ${monthDays.map(d => `<tr><td>${Number(d.date.slice(8))}日(${DOW[dow(d.date)]})</td><td>${d.slips}/${d.guests}</td><td>${yen(d.total)}</td>${own ? `<td>${yen(d.total / t - d.cost - d.labor)}</td>` : ''}</tr>`).join('')}</table>
+      ${own ? '<div class="note">* 税抜売上 − 原価 − 人件費（固定費を引く前）</div>' : ''}` : '<div class="empty">記録なし</div>'}</div>`;
+
+  const labels = Array.from({ length: dim }, (_, i) => i + 1);
+  const dayVal = (m, i) => { const d = all.find(x => x.date === m + '-' + String(i).padStart(2, '0')); return d && d.total > 0 ? d.total : null; };
+  const daily = labels.map(i => dayVal(ym, i));
+  chart('cDaily', { type: 'bar', data: { labels, datasets: [
+    { label: '売上', data: daily, backgroundColor: daily.map(v => beDay && v < beDay ? '#e8a49c' : '#b8923f') },
+    ...(beDay ? [{ type: 'line', label: '黒字ライン', data: labels.map(() => Math.round(beDay)), borderColor: '#c0392b', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0 }] : []),
+  ] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: c => { const d = ym + '-' + String(c[0].label).padStart(2, '0'); return c[0].label + '日(' + DOW[dow(d)] + ')'; },
+    label: c => c.dataset.label + ' ' + yen(c.raw) } } } } });
+
+  const cum = (m, stop) => { let s = 0; return labels.map(i => { if (i > stop || i > daysIn(m)) return null; s += dayVal(m, i) || 0; return s; }); };
+  const lastRec = Math.max(0, ...monthDays.map(d => Number(d.date.slice(8))));
+  const pm = ymShift(ym, -1), py = ymShift(ym, -12);
+  chart('cCum', { type: 'line', data: { labels, datasets: [
+    { label: ymLabel(ym), data: cum(ym, Math.max(lastRec, upTo < dim ? upTo : 0)), borderColor: '#1c2233', backgroundColor: '#1c2233', borderWidth: 2.5, pointRadius: 0 },
+    { label: '前月', data: sumDays(all, pm).n ? cum(pm, dim) : [], borderColor: '#d4b77a', borderWidth: 1.5, pointRadius: 0 },
+    { label: '前年', data: sumDays(all, py).n ? cum(py, dim) : [], borderColor: '#7a9cc6', borderWidth: 1.5, pointRadius: 0 },
+    ...(be ? [{ label: '黒字ライン', data: labels.map(i => Math.round(be * i / dim)), borderColor: '#c0392b', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0 }] : []),
+  ] }, options: { plugins: { tooltip: { mode: 'index', intersect: false, callbacks: { label: c => c.dataset.label + ' ' + yen(c.raw) } } } } });
+
+  chart('cDow', { type: 'bar', data: { labels: byDow.map(x => DOW[x.k]), datasets: [{ label: '平均売上', data: byDow.map(x => Math.round(x.avg)),
+    backgroundColor: byDow.map(x => x.k === 5 || x.k === 6 ? '#1c2233' : '#b8923f') }] },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${yen(c.raw)}（${byDow[c.dataIndex].n}日の平均）` } } } } });
+  chart('cTrend', { type: 'bar', data: { labels: months.map(ymLabel), datasets: [
+    { label: '売上', data: mSum.map(s => Math.round(s.ex)), backgroundColor: '#d4b77a' },
+    ...(own ? [{ label: '原価＋人件費', data: mSum.map(s => Math.round(s.cost + s.labor)), backgroundColor: '#8a8fa3' },
+    { type: 'line', label: '営業利益', data: mSum.map(s => s.n ? Math.round(s.profit - fixed) : null), borderColor: '#2f7d4f', backgroundColor: '#2f7d4f', borderWidth: 2 }] : []),
+  ] }, options: { plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ' ' + yen(c.raw) } } } } });
+}
+
+// ===== 仕入れ（記録＋酒・食材の単価） =====
+async function renderMats() {
+  if (!purMonth) purMonth = D.today.slice(0, 7);
+  purList = await call('getPurchases', purMonth);
+  if (tab !== 'mat') return;
+  const used = id => D.menus.filter(m => (D.recipes[m.id] || []).some(l => l.matId === id));
+  $('#main').innerHTML = `
+    <h2 style="margin-top:4px">仕入れの記録</h2>
+    <div class="row"><input type="month" value="${purMonth}" onchange="purMonth=this.value;render()"><button class="btn" style="white-space:nowrap" onclick="editPur()">＋ 記録</button></div>
+    <div class="card num" style="margin-top:8px">
+      <div class="row"><span class="grow sub">${ymLabel(purMonth)}の仕入れ合計（${purList.length}件）</span><b style="font-size:18px">${yen(purList.reduce((a, p) => a + p.amount, 0))}</b></div>
+      ${purList.length ? `<table style="margin-top:6px">${purList.map(p => `<tr onclick="editPur('${p.id}')" style="cursor:pointer"><td>${Number(p.date.slice(8))}日 ${esc(p.shop)}<div class="sub">${esc(p.what)}</div></td><td>${yen(p.amount)}</td></tr>`).join('')}</table>`
+        : '<div class="sub" style="margin-top:6px">酒屋・スーパーなどで買ったものを記録すると、集計で「本来の原価」と比べられます</div>'}
+    </div>
+    <h2>酒・食材の単価（メニューの原価計算に使う）</h2>
+    ${D.materials.length ? cats(D.materials).map(c => `<h2>${esc(c)}</h2>` + D.materials.filter(m => (m.cat || 'その他') === c).map(m => `
+    <div class="card menu-item" onclick="editMat('${m.id}')"><div class="grow"><div style="font-weight:700">${esc(m.name)}</div>
+      <div class="sub num">${m.amount.toLocaleString()}${m.unit}で ${yen(m.price)}　→ 1${m.unit} ${yenU(unitPrice(m))}</div></div>
+      <div class="stats sub">${used(m.id).length}品で使用<br>${esc(m.updated.slice(0, 10))}</div></div>`).join('')).join('')
+    : '<div class="empty">酒・食材を登録すると、メニューの原価が自動で計算されます。<br>例：ウイスキー 700ml ¥2,800／炭酸水 500ml ¥90／ライム 1個 ¥80</div>'}
+    <button class="btn wide" style="margin-top:8px" onclick="editMat()">＋ 酒・食材を追加</button>`;
+}
+function editPur(id) {
+  const p = purList.find(x => x.id === id) || { date: D.today.slice(0, 7) === purMonth ? D.today : purMonth + '-01', shop: '', what: '', amount: '' };
+  openModal(id ? '仕入れを修正' : '仕入れを記録', `
+    <label>日付</label><input id="pDate" type="date" value="${p.date}">
+    <label>仕入先</label><input id="pShop" value="${esc(p.shop)}" placeholder="例：〇〇酒店">
+    <label>内容</label><input id="pWhat" value="${esc(p.what)}" placeholder="例：ウイスキー2本、炭酸水1ケース">
+    <label>金額（円・レシートの合計）</label><input id="pAmt" type="number" inputmode="numeric" value="${p.amount}">
+    <button class="btn wide" style="margin-top:14px" onclick="savePur('${id || ''}')">保存する</button>
+    ${id ? `<button class="btn del wide" style="margin-top:8px" onclick="delPur('${id}')">削除</button>` : ''}`);
+}
+async function savePur(id) {
+  const p = { id, date: $('#pDate').value, shop: $('#pShop').value.trim(), what: $('#pWhat').value.trim(), amount: Number($('#pAmt').value) || 0 };
+  if (!p.date || !(p.amount > 0)) return alert('日付と金額を入れてください');
+  await call('savePurchase', p); purMonth = p.date.slice(0, 7); closeModal(); render(); toast('保存しました');
+}
+async function delPur(id) {
+  if (!confirm('この仕入れの記録を削除しますか？')) return;
+  await call('deletePurchase', id, purMonth); closeModal(); render(); toast('削除しました');
+}
+let matEditId = null;
+function editMat(id) {
+  matEditId = id || null;
+  const m = D.materials.find(x => x.id === id) || { name: '', cat: '', amount: '', unit: 'ml', price: '' };
+  openModal(id ? '酒・食材を編集' : '酒・食材を追加', `
+    <label>名前</label><input id="aName" value="${esc(m.name)}" placeholder="例：角瓶 700ml">
+    <label>区分</label><select id="aCat">${MAT_CATS.concat(MAT_CATS.includes(m.cat) || !m.cat ? [] : [m.cat]).map(c => `<option ${c === m.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    <div class="row"><div class="grow"><label>購入量</label><input id="aAmt" type="number" inputmode="decimal" value="${m.amount}" placeholder="700" oninput="updMat()"></div>
+      <div style="width:90px"><label>単位</label><select id="aUnit" onchange="updMat()">${UNITS.map(u => `<option ${u === m.unit ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+    <label>購入価格（円）</label><input id="aPrice" type="number" inputmode="numeric" value="${m.price}" placeholder="2800" oninput="updMat()">
+    <div class="card num" id="aOut" style="margin-top:12px"></div>
+    <button class="btn wide" onclick="saveMat('${id || ''}')">保存する</button>
+    ${id ? `<button class="btn del wide" style="margin-top:8px" onclick="delMat('${id}')">削除</button>` : ''}`);
+  updMat();
+}
+function updMat() {
+  const editing = matById(matEditId);
+  const draft = { id: matEditId, amount: Number($('#aAmt').value), price: Number($('#aPrice').value), unit: $('#aUnit').value };
+  let html = `1${draft.unit}あたり <b>${yenU(unitPrice(draft))}</b>` + (draft.unit === 'ml' ? `（30ml で ${yen1(unitPrice(draft) * 30)}）` : '');
+  if (editing) {
+    const hit = D.menus.filter(m => (D.recipes[m.id] || []).some(l => l.matId === editing.id));
+    if (hit.length) html += `<h2 style="margin:12px 0 6px">影響するメニュー（${hit.length}品）</h2><table><tr><th>メニュー</th><th>今の原価率</th><th>変更後</th></tr>` +
+      hit.map(m => { const a = menuMetrics(m), b = metrics(m.price, costOf(D.recipes[m.id], draft));
+        return `<tr><td>${esc(m.name)}</td><td>${pct(a.costRate)}</td><td style="color:${b.costRate > target() ? 'var(--bad)' : 'inherit'}">${pct(b.costRate)}</td></tr>`; }).join('') + '</table>';
+  }
+  $('#aOut').innerHTML = html;
+}
+async function saveMat(id) {
+  const m = { id, name: $('#aName').value.trim(), cat: $('#aCat').value, amount: Number($('#aAmt').value), unit: $('#aUnit').value, price: Number($('#aPrice').value) || 0 };
+  if (!m.name || !(m.amount > 0)) return alert('名前と購入量を入れてください');
+  D = await call('saveMaterial', m); closeModal(); render(); toast('保存しました（メニューの原価にも反映）');
+}
+async function delMat(id) {
+  if (!confirm('この酒・食材を削除しますか？')) return;
+  D = await call('deleteMaterial', id); closeModal(); render(); toast('削除しました');
+}
+
+// ===== 設定 =====
+function renderSettings() {
+  const account = `<h2>アカウント</h2>
+    <div class="card row"><div class="grow"><b>${esc(D.me.name)}</b> <span class="sub">${isOwner() ? 'オーナー' : 'スタッフ'}</span></div>
+      <button class="btn sec" onclick="logout()">ログアウト</button></div>`;
+  if (!isOwner()) { $('#main').innerHTML = account + '<div class="note">暗証番号を変えたいときはオーナーに頼んでください</div>'; return; }
+  const s = D.settings, p = k => Math.round(s[k] * 1000) / 10;
+  $('#main').innerHTML = `
+    <h2>お会計・人件費</h2>
+    <div class="card">
+      <label style="margin-top:0">サービス料（%）　※飲食代にかける。0 でなし</label><input id="sSvc" type="number" inputmode="decimal" value="${p('サービス料率')}">
+      <label>人件費（%）　※担当した伝票の飲食代（サービス料は除く）にかける</label><input id="sLabor" type="number" inputmode="decimal" value="${p('人件費率')}">
+      <label>営業日の切り替え時刻（時）　※これより前の会計は前の日の売上</label><input id="sCut" type="number" inputmode="numeric" value="${s['営業日の切り替え時刻']}">
+    </div>
+    <h2>目標・計算</h2>
+    <div class="card">
+      <label style="margin-top:0">目標原価率（%）</label><input id="sTarget" type="number" inputmode="decimal" value="${p('目標原価率')}">
+      <label>消費税率（%）　※売価は税込で入力、利益は税抜で計算</label><input id="sTax" type="number" inputmode="decimal" value="${p('消費税率')}">
+      <label>月の営業日数</label><input id="sDays" type="number" inputmode="numeric" value="${s['月の営業日数']}">
+    </div>
+    <h2>固定費（月額）</h2>
+    <div class="card"><div id="fixed"></div>
+      <button class="btn sec wide" style="margin-top:6px" onclick="fixedList.push({name:'',amount:0});drawFixed()">＋ 項目を追加</button>
+      <div class="row num" style="margin-top:10px"><span class="grow sub">合計</span><b id="fixedTotal"></b></div></div>
+    <div class="note" style="margin:-4px 4px 10px">サービス料・人件費の変更は、これから入れる伝票から反映されます（過去の伝票はそのまま）</div>
+    <button class="btn wide" onclick="saveSet()">保存する</button>
+    <h2>スタッフ（暗証番号でログイン・伝票の担当）</h2>
+    <div id="staff"><div class="sub">読み込み中…</div></div>
+    <button class="btn sec wide" onclick="editStaff()">＋ スタッフを追加</button>
+    ${account}`;
+  fixedList = D.fixed.map(f => ({ ...f })); drawFixed();
+  call('listStaff').then(drawStaff);
+}
+let fixedList = [], staffList = [];
+function drawFixed() {
+  $('#fixed').innerHTML = fixedList.map((f, i) => `<div class="line"><input value="${esc(f.name)}" placeholder="項目" oninput="fixedList[${i}].name=this.value">
+    <input type="number" inputmode="numeric" value="${f.amount || ''}" placeholder="円" oninput="fixedList[${i}].amount=Number(this.value)||0;sumFixed()">
+    <button class="x" onclick="fixedList.splice(${i},1);drawFixed()">×</button></div>`).join('');
+  sumFixed();
+}
+function sumFixed() { $('#fixedTotal').textContent = yen(fixedList.reduce((a, f) => a + f.amount, 0)); }
+async function saveSet() {
+  const v = id => Number($(id).value);
+  const s = { 'サービス料率': v('#sSvc') / 100, '人件費率': v('#sLabor') / 100, '営業日の切り替え時刻': v('#sCut'),
+    '目標原価率': v('#sTarget') / 100, '消費税率': v('#sTax') / 100, '月の営業日数': v('#sDays') };
+  if (!(s['目標原価率'] > 0)) return alert('目標原価率を入れてください');
+  if (!(s['営業日の切り替え時刻'] >= 0 && s['営業日の切り替え時刻'] <= 12)) return alert('切り替え時刻は 0〜12 の間にしてください');
+  D = await call('saveSettings', s, fixedList.filter(f => f.name.trim()));
+  render(); toast('保存しました');
+}
+function drawStaff(list) {
+  staffList = list;
+  const el = $('#staff');
+  if (el) el.innerHTML = list.map(u => `<div class="card menu-item" onclick="editStaff('${u.id}')"><div class="grow"><b>${esc(u.name)}</b>
+    ${u.role === 'owner' ? '<span class="chip">オーナー</span>' : ''} ${u.active ? '' : '<span class="chip off">停止中</span>'}</div><div class="sub">${esc(u.created.slice(0, 10))}</div></div>`).join('');
+}
+function editStaff(id) {
+  const u = staffList.find(x => x.id === id) || { name: '', role: 'staff', active: true };
+  openModal(id ? 'スタッフを編集' : 'スタッフを追加', `
+    <label>名前</label><input id="uName" value="${esc(u.name)}" placeholder="例：山田">
+    <label>権限</label><select id="uRole"><option value="staff">スタッフ（伝票入力と売上の集計だけ）</option><option value="owner" ${u.role === 'owner' ? 'selected' : ''}>オーナー（すべて）</option></select>
+    <label>${id ? '新しい暗証番号（変えないときは空のまま）' : '暗証番号（4〜8桁の数字）'}</label><input id="uPin" type="password" inputmode="numeric" autocomplete="new-password">
+    ${id ? `<label>状態</label><select id="uActive"><option value="1">使える</option><option value="0" ${u.active ? '' : 'selected'}>停止（辞めた人など。ログインできなくなる）</option></select>` : ''}
+    <div class="note">暗証番号は暗号化して保存するため、あとから見ることはできません。忘れたら新しい番号を入れ直してください</div>
+    <button class="btn wide" style="margin-top:12px" onclick="saveStaffEd('${id || ''}')">保存する</button>`);
+}
+async function saveStaffEd(id) {
+  const s = { id, name: $('#uName').value.trim(), role: $('#uRole').value, pin: $('#uPin').value.trim(), active: id ? $('#uActive').value === '1' : true };
+  if (!s.name) return alert('名前を入れてください');
+  if ((!id || s.pin) && !/^\d{4,8}$/.test(s.pin)) return alert('暗証番号は4〜8桁の数字にしてください');
+  drawStaff(await call('saveStaff', s)); closeModal(); toast('保存しました');
+  D = await call('getAll'); // 伝票の「担当」の一覧も新しくする
+}
+
+// ===== ログイン =====
+async function showLogin() {
+  D = null; closeModal(); $('#nav').innerHTML = ''; $('#who').textContent = ''; $('#title').textContent = 'Bar LF';
+  const st = await call('status');
+  $('#main').innerHTML = `<div class="login"><img class="logo" src="icon-180.png" alt="">` + (st.needsSetup ? `
+    <h3>はじめの設定</h3><p class="sub">オーナーの名前と暗証番号を決めてください</p>
+    <input id="lName" placeholder="名前" style="letter-spacing:0;font-size:18px">
+    <input id="lPin" type="password" inputmode="numeric" placeholder="暗証番号（4〜8桁）" style="margin-top:8px" autocomplete="new-password">
+    <input id="lPin2" type="password" inputmode="numeric" placeholder="もう一度" style="margin-top:8px" autocomplete="new-password">
+    <button class="btn wide" style="margin-top:12px" onclick="setupOwner()">登録してはじめる</button>` : `
+    <p class="sub">暗証番号を入れてください</p>
+    <input id="lPin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+    <button class="btn wide" style="margin-top:12px" onclick="login()">ログイン</button>`) + '</div>';
+}
+async function login() {
+  const r = await call('login', $('#lPin').value.trim());
+  store.set(TOKEN_KEY, r.token); boot();
+}
+async function setupOwner() {
+  const name = $('#lName').value.trim(), pin = $('#lPin').value.trim();
+  if (!name) return alert('名前を入れてください');
+  if (!/^\d{4,8}$/.test(pin)) return alert('暗証番号は4〜8桁の数字にしてください');
+  if (pin !== $('#lPin2').value.trim()) return alert('暗証番号が一致しません');
+  const r = await call('setupOwner', name, pin);
+  store.set(TOKEN_KEY, r.token); boot();
+}
+async function logout() {
+  if (!confirm('ログアウトしますか？')) return;
+  await call('logout').catch(() => {});
+  store.set(TOKEN_KEY, null); showLogin();
+}
+
+// ===== 起動 =====
+async function boot() {
+  if (!API_URL) { $('#main').innerHTML = '<div class="empty">API_URL が未設定です（仕組み.md の公開手順を参照）</div>'; return; }
+  if (!store.get(TOKEN_KEY)) return showLogin();
+  D = await call('getAll');
+  dayDate = D.today; day = null; reportMonth = null; purMonth = null;
+  go('slip');
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+boot();
+</script>
+</body>
+</html>
