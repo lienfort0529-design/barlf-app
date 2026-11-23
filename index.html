@@ -103,8 +103,8 @@
 <script>
 // Apps Script を「ウェブアプリ」で公開したときの URL（/exec で終わるもの）
 const API_URL = 'https://script.google.com/macros/s/AKfycbzn5OnJj6pM8dGyV7rumXB_QIREewoVr-I9kPAjFZV_fQbaZIf_fVgEnopyvyjMPBiQyw/exec';
-const ALL_TABS = [['slip','🧾','伝票'],['report','📊','集計'],['menu','🍸','メニュー'],['mat','📦','仕入れ'],['set','⚙️','設定']];
-const STAFF_TABS = ['slip', 'report', 'set'];
+const ALL_TABS = [['slip','🧾','伝票'],['report','📊','集計'],['menu','🍸','メニュー'],['mat','📦','在庫'],['set','⚙️','設定']];
+const STAFF_TABS = ['slip', 'report', 'mat', 'set'];
 const TOKEN_KEY = 'barlf_token';
 let TABS = ALL_TABS;
 const isOwner = () => D && D.me && D.me.role === 'owner';
@@ -302,7 +302,7 @@ function renderMenus() {
       <div class="stats num"><span class="chip ${k.costRate > target() ? 'bad' : ''}">原価率 ${pct(k.costRate)}</span>
         <div>粗利 <b>${yen(k.gross)}</b>（${pct(k.grossRate)}）</div></div></div>`;
   let body;
-  if (!D.menus.length) body = `<div class="empty">まだメニューがありません。<br>先に「仕入れ」タブで酒・食材を登録してから、メニューを追加してください。</div>`;
+  if (!D.menus.length) body = `<div class="empty">まだメニューがありません。<br>先に「在庫」タブで酒・食材を登録してから、メニューを追加してください。</div>`;
   else if (menuSort === 'cat') body = cats(rows.map(r => r.m)).map(c => `<h2>${esc(c)}</h2>` + rows.filter(r => (r.m.cat || 'その他') === c).map(item).join('')).join('');
   else body = rows.map(item).join('');
   $('#main').innerHTML = `
@@ -335,7 +335,7 @@ function editMenu(id, copyFrom) {
     <h2>レシピ（1杯に使う量）</h2>
     <div id="lines"></div>
     <button class="btn sec wide" onclick="ed.lines.push({matId:'',qty:''});drawLines()">＋ 材料を追加</button>
-    ${D.materials.length ? '' : '<div class="sub" style="margin-top:6px">※ 酒・食材が未登録です。「仕入れ」タブで先に登録してください。</div>'}
+    ${D.materials.length ? '' : '<div class="sub" style="margin-top:6px">※ 酒・食材が未登録です。「在庫」タブで先に登録してください。</div>'}
     <div class="note">例：ハイボール ＝ ウイスキー 30ml ＋ 炭酸水 120ml ＋ 氷 1個。チャージやお通しもメニューとして作れます</div>
     <h2>売価シミュレーション</h2>
     <div class="card"><label style="margin-top:0">この売価にしたら（税込・円）</label><input id="sim" type="number" inputmode="numeric" placeholder="例：800" oninput="updEd()"><div id="simOut" class="sub num" style="margin-top:6px"></div></div>
@@ -448,9 +448,10 @@ async function renderReport() {
       <div><small>💴 現金</small><strong>${yen(cur.cash)}</strong></div>
       <div><small>💳 カード</small><strong>${yen(cur.card)}</strong></div>
       ${own ? `<div><small>原価（酒・食材）</small><strong>${yen(cur.cost)}</strong><small>原価率 ${pct(cur.ex ? cur.cost / cur.ex : NaN)}</small></div>
-      <div><small>実際の仕入れ</small><strong>${yen(pur)}</strong><small>${pur ? `原価との差 ${yen(pur - cur.cost)}` : '「仕入れ」タブで記録'}</small></div>
+      <div><small>実際の仕入れ</small><strong>${yen(pur)}</strong><small>${pur ? `原価との差 ${yen(pur - cur.cost)}` : '「在庫」タブで記録'}</small></div>
       <div><small>人件費（担当売上×${pct(lr)}）</small><strong>${yen(cur.labor)}</strong><small>売上比 ${pct(cur.ex ? cur.labor / cur.ex : NaN)}</small></div>
       <div><small>固定費</small><strong>${yen(fixed)}</strong><small>設定タブで変更</small></div>
+      <div><small>棚卸の差（ロス）</small><strong class="${r.loss < 0 ? 'down' : ''}">${yen(r.loss)}</strong><small>${r.loss ? 'マイナス＝足りなかった分' : 'この月の棚卸なし'}</small></div>
       <div class="big"><small>営業利益（税抜売上 − 原価 − 人件費 − 固定費）</small><strong class="${op >= 0 ? 'up' : 'down'}">${yen(op)}</strong>
         <small>利益率 ${pct(cur.ex ? op / cur.ex : NaN)}</small></div>` : ''}
       <div class="big"><small>${upTo < dim ? `1日〜${upTo}日の比較（税込）` : '前月・前年との比較（税込）'}</small>
@@ -514,57 +515,141 @@ async function renderReport() {
   ] }, options: { plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ' ' + yen(c.raw) } } } } });
 }
 
-// ===== 仕入れ（記録＋酒・食材の単価） =====
+// ===== 在庫（在庫一覧・棚卸・仕入れの記録・酒と食材の単価） =====
+const BOXES = ['本', '袋', '個', 'パック', '箱', '缶', '樽'];
+const n1 = n => (Math.round((n || 0) * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
+const low = i => i.reorder !== '' && i.calc <= i.reorder;
+let stock = null;
 async function renderMats() {
+  const own = isOwner();
   if (!purMonth) purMonth = D.today.slice(0, 7);
-  purList = await call('getPurchases', purMonth);
+  stock = await call('getStock');
+  if (own) purList = await call('getPurchases', purMonth);
   if (tab !== 'mat') return;
-  const used = id => D.menus.filter(m => (D.recipes[m.id] || []).some(l => l.matId === id));
+  const items = stock.items, lows = items.filter(low);
+  const line = i => `<div class="card menu-item ${low(i) ? 'over' : ''}" ${own ? `onclick="editMat('${i.id}')"` : ''}>
+      <div class="grow"><div style="font-weight:700">${esc(i.name)}</div>
+        <div class="sub num">${i.baseDate ? `棚卸 ${Number(i.baseDate.slice(5, 7))}/${Number(i.baseDate.slice(8))} ${n1(i.base)}` : '<span style="color:var(--bad)">棚卸まだ</span>'}　仕入れ +${n1(i.bought)}　使用 −${n1(i.used)}</div></div>
+      <div class="stats num"><b style="font-size:18px;${i.calc < 0 ? 'color:var(--bad)' : ''}">${n1(i.calc)}</b>${esc(i.box)}
+        ${i.reorder !== '' ? `<div class="sub">発注 ${n1(i.reorder)}${esc(i.box)}以下</div>` : ''}</div></div>`;
   $('#main').innerHTML = `
-    <h2 style="margin-top:4px">仕入れの記録</h2>
+    ${lows.length ? `<div class="card over"><b style="color:var(--bad)">⚠️ 発注が必要（${lows.length}品）</b>
+      <div class="sub" style="margin-top:4px">${lows.map(i => `${esc(i.name)} 残り${n1(i.calc)}${esc(i.box)}`).join('、')}</div></div>` : ''}
+    <div class="row" style="margin:4px 0 0"><h2 class="grow" style="margin:8px 4px">在庫（計算上の数）</h2><button class="btn" onclick="openStocktake()">📝 棚卸</button></div>
+    ${items.length ? cats(items).map(c => `<h2>${esc(c)}</h2>` + items.filter(i => (i.cat || 'その他') === c).map(line).join('')).join('')
+      : `<div class="empty">${own ? '下の「酒・食材」を登録すると在庫が出ます' : 'まだ酒・食材が登録されていません'}</div>`}
+    <div class="note">計算上の数 ＝ 最後の棚卸 ＋ その後の仕入れ − 伝票の注文で使った量（今のレシピで計算）。最初に一度、今ある数を棚卸で入れてください</div>
+    ${own ? renderPurAndMats() : ''}`;
+}
+function renderPurAndMats() {
+  const used = id => D.menus.filter(m => (D.recipes[m.id] || []).some(l => l.matId === id));
+  return `
+    <h2 style="margin-top:24px">仕入れの記録</h2>
     <div class="row"><input type="month" value="${purMonth}" onchange="purMonth=this.value;render()"><button class="btn" style="white-space:nowrap" onclick="editPur()">＋ 記録</button></div>
     <div class="card num" style="margin-top:8px">
       <div class="row"><span class="grow sub">${ymLabel(purMonth)}の仕入れ合計（${purList.length}件）</span><b style="font-size:18px">${yen(purList.reduce((a, p) => a + p.amount, 0))}</b></div>
-      ${purList.length ? `<table style="margin-top:6px">${purList.map(p => `<tr onclick="editPur('${p.id}')" style="cursor:pointer"><td>${Number(p.date.slice(8))}日 ${esc(p.shop)}<div class="sub">${esc(p.what)}</div></td><td>${yen(p.amount)}</td></tr>`).join('')}</table>`
-        : '<div class="sub" style="margin-top:6px">酒屋・スーパーなどで買ったものを記録すると、集計で「本来の原価」と比べられます</div>'}
+      ${purList.length ? `<table style="margin-top:6px">${purList.map(p => `<tr onclick="editPur('${p.id}')" style="cursor:pointer"><td>${Number(p.date.slice(8))}日 ${esc(p.shop)}
+        <div class="sub">${[...p.lines.map(l => `${esc(l.name)}×${n1(l.qty)}`), p.what ? esc(p.what) : ''].filter(Boolean).join('、')}</div></td><td>${yen(p.amount)}</td></tr>`).join('')}</table>`
+        : '<div class="sub" style="margin-top:6px">買った品と数を入れると在庫に足され、値段も原価に反映されます</div>'}
     </div>
-    <h2>酒・食材の単価（メニューの原価計算に使う）</h2>
+    <h2>酒・食材（メニューの原価・在庫に使う）</h2>
     ${D.materials.length ? cats(D.materials).map(c => `<h2>${esc(c)}</h2>` + D.materials.filter(m => (m.cat || 'その他') === c).map(m => `
     <div class="card menu-item" onclick="editMat('${m.id}')"><div class="grow"><div style="font-weight:700">${esc(m.name)}</div>
-      <div class="sub num">${m.amount.toLocaleString()}${m.unit}で ${yen(m.price)}　→ 1${m.unit} ${yenU(unitPrice(m))}</div></div>
+      <div class="sub num">1${esc(m.box)}＝${m.amount.toLocaleString()}${m.unit}で ${yen(m.price)}　→ 1${m.unit} ${yenU(unitPrice(m))}</div></div>
       <div class="stats sub">${used(m.id).length}品で使用<br>${esc(m.updated.slice(0, 10))}</div></div>`).join('')).join('')
-    : '<div class="empty">酒・食材を登録すると、メニューの原価が自動で計算されます。<br>例：ウイスキー 700ml ¥2,800／炭酸水 500ml ¥90／ライム 1個 ¥80</div>'}
+    : '<div class="empty">酒・食材を登録すると、メニューの原価と在庫が自動で計算されます。<br>例：ウイスキー 700ml ¥2,800／炭酸水 500ml ¥90／ライム 1個 ¥80</div>'}
     <button class="btn wide" style="margin-top:8px" onclick="editMat()">＋ 酒・食材を追加</button>`;
 }
+
+// 棚卸：入れた品だけ保存する。開いているボトルは目分量で（例：0.4）
+let tk = {};
+function openStocktake() {
+  tk = {};
+  const items = stock.items;
+  if (!items.length) return alert('先に酒・食材を登録してください');
+  openModal('棚卸', `
+    <label style="margin-top:0">日付（その日の営業が終わったあとの数）</label><input id="tkDate" type="date" value="${D.today}">
+    <div class="note">数えた品だけ入れてください（空のままの品は保存しません）。開いているボトルは残りを目分量で 0.1 単位（半分なら 0.5）</div>
+    ${cats(items).map(c => `<h2>${esc(c)}</h2>` + items.filter(i => (i.cat || 'その他') === c).map(i => `
+      <div class="card row"><div class="grow"><div style="font-weight:700">${esc(i.name)}</div><div class="sub num">計算上 ${n1(i.calc)}${esc(i.box)}</div><div class="sub num" id="tkd_${i.id}"></div></div>
+        <div style="width:110px" class="row"><input type="number" inputmode="decimal" step="0.1" min="0" placeholder="${n1(i.calc)}" oninput="setTk('${i.id}',this.value)"><span class="sub">${esc(i.box)}</span></div></div>`).join('')).join('')}`,
+    `<div class="row"><div class="grow sub" id="tkCount">0品入力</div><button class="btn" onclick="saveTk()">棚卸を保存</button></div>`);
+}
+function setTk(id, v) {
+  if (v === '') delete tk[id]; else tk[id] = Number(v);
+  const i = stock.items.find(x => x.id === id), el = $('#tkd_' + id), d = v === '' ? null : Math.round((Number(v) - i.calc) * 10) / 10;
+  el.innerHTML = d == null ? '' : `差 <b style="color:${d < 0 ? 'var(--bad)' : 'var(--good)'}">${d > 0 ? '+' : ''}${n1(d)}${esc(i.box)}</b>${isOwner() && d ? `（${yen(d * i.price)}）` : ''}`;
+  $('#tkCount').textContent = Object.keys(tk).length + '品入力';
+}
+async function saveTk() {
+  const n = Object.keys(tk).length;
+  if (!n) return alert('数を1つ以上入れてください');
+  const date = $('#tkDate').value;
+  stock = await call('saveStocktake', date, tk);
+  closeModal(); render(); toast(`${n}品の棚卸を保存しました`);
+}
+
+// 仕入れ：品と数と金額（品ごとの合計）。明細にない分は「その他」に
+let pe = null;
 function editPur(id) {
-  const p = purList.find(x => x.id === id) || { date: D.today.slice(0, 7) === purMonth ? D.today : purMonth + '-01', shop: '', what: '', amount: '' };
+  const p = purList.find(x => x.id === id) || { date: D.today.slice(0, 7) === purMonth ? D.today : purMonth + '-01', shop: '', what: '', lines: [], other: 0 };
+  pe = { id: id || '', lines: p.lines.map(l => ({ ...l })), other: p.other || '' };
+  if (!pe.lines.length) pe.lines.push({ matId: '', qty: '', amount: '' });
   openModal(id ? '仕入れを修正' : '仕入れを記録', `
     <label>日付</label><input id="pDate" type="date" value="${p.date}">
     <label>仕入先</label><input id="pShop" value="${esc(p.shop)}" placeholder="例：〇〇酒店">
-    <label>内容</label><input id="pWhat" value="${esc(p.what)}" placeholder="例：ウイスキー2本、炭酸水1ケース">
-    <label>金額（円・レシートの合計）</label><input id="pAmt" type="number" inputmode="numeric" value="${p.amount}">
-    <button class="btn wide" style="margin-top:14px" onclick="savePur('${id || ''}')">保存する</button>
-    ${id ? `<button class="btn del wide" style="margin-top:8px" onclick="delPur('${id}')">削除</button>` : ''}`);
+    <h2>買った品（在庫に足す）</h2>
+    <div class="note" style="margin:-4px 4px 6px">数は「1本・1袋」の単位。金額はその品の合計（例：角瓶 6本 ¥10,800）</div>
+    <div id="pLines"></div>
+    <button class="btn sec wide" onclick="pe.lines.push({matId:'',qty:'',amount:''});drawPurLines()">＋ 品を追加</button>
+    <label>その他の金額（在庫に関係ない物・送料など）</label><input type="number" inputmode="numeric" value="${pe.other || ''}" oninput="pe.other=this.value;updPur()">
+    <label>メモ</label><input id="pWhat" value="${esc(p.what)}" placeholder="例：おしぼり、レモン">
+    ${id ? `<button class="btn del wide" style="margin-top:12px" onclick="delPur('${id}')">削除</button>` : ''}`,
+    `<div class="row"><div class="grow num" id="pTotal"></div><button class="btn" onclick="savePur()">保存する</button></div>`);
+  drawPurLines();
 }
-async function savePur(id) {
-  const p = { id, date: $('#pDate').value, shop: $('#pShop').value.trim(), what: $('#pWhat').value.trim(), amount: Number($('#pAmt').value) || 0 };
-  if (!p.date || !(p.amount > 0)) return alert('日付と金額を入れてください');
-  await call('savePurchase', p); purMonth = p.date.slice(0, 7); closeModal(); render(); toast('保存しました');
+function drawPurLines() {
+  $('#pLines').innerHTML = pe.lines.map((l, i) => {
+    const m = matById(l.matId);
+    return `<div class="card" style="padding:8px"><div class="row"><select class="grow" onchange="pe.lines[${i}].matId=this.value;drawPurLines()">${matOptions(l.matId)}</select>
+        <button class="btn del" style="padding:6px" onclick="pe.lines.splice(${i},1);drawPurLines()">×</button></div>
+      <div class="row" style="margin-top:6px"><input type="number" inputmode="decimal" step="0.1" placeholder="数" value="${l.qty}" oninput="pe.lines[${i}].qty=this.value;updPur()" style="width:90px"><span class="sub">${m ? esc(m.box) : ''}</span>
+        <input type="number" inputmode="numeric" placeholder="金額（円）" value="${l.amount}" oninput="pe.lines[${i}].amount=this.value;updPur()" class="grow"></div>
+      <div class="sub num" id="pl${i}"></div></div>`;
+  }).join('');
+  updPur();
+}
+function updPur() {
+  pe.lines.forEach((l, i) => { const m = matById(l.matId), el = $('#pl' + i), q = Number(l.qty), a = Number(l.amount);
+    if (el) el.innerHTML = m && q > 0 && a > 0 ? `1${esc(m.box)} ${yen(a / q)}（今の登録 ${yen(m.price)}）` + (Math.round(a / q) !== m.price ? ' → 原価に反映' : '') : ''; });
+  const total = pe.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) + (Number(pe.other) || 0);
+  $('#pTotal').innerHTML = `<span class="sub">合計</span> <b style="font-size:18px">${yen(total)}</b>`;
+}
+async function savePur() {
+  const lines = pe.lines.filter(l => l.matId && Number(l.qty) > 0).map(l => ({ matId: l.matId, qty: Number(l.qty), amount: Number(l.amount) || 0 }));
+  if (pe.lines.some(l => l.matId && !(Number(l.qty) > 0))) return alert('数を入れていない品があります');
+  const p = { id: pe.id, date: $('#pDate').value, shop: $('#pShop').value.trim(), what: $('#pWhat').value.trim(), lines, other: Number(pe.other) || 0 };
+  if (!p.date) return alert('日付を入れてください');
+  if (!(lines.reduce((s, l) => s + l.amount, 0) + p.other > 0)) return alert('金額を入れてください');
+  const r = await call('savePurchase', p); D = r.all; purList = r.list; purMonth = p.date.slice(0, 7);
+  closeModal(); render(); toast('保存しました（在庫に反映）');
 }
 async function delPur(id) {
-  if (!confirm('この仕入れの記録を削除しますか？')) return;
+  if (!confirm('この仕入れの記録を削除しますか？（在庫からも引かれます）')) return;
   await call('deletePurchase', id, purMonth); closeModal(); render(); toast('削除しました');
 }
 let matEditId = null;
 function editMat(id) {
   matEditId = id || null;
-  const m = D.materials.find(x => x.id === id) || { name: '', cat: '', amount: '', unit: 'ml', price: '' };
+  const m = D.materials.find(x => x.id === id) || { name: '', cat: '', amount: '', unit: 'ml', price: '', box: '本', reorder: '' };
   openModal(id ? '酒・食材を編集' : '酒・食材を追加', `
     <label>名前</label><input id="aName" value="${esc(m.name)}" placeholder="例：角瓶 700ml">
     <label>区分</label><select id="aCat">${MAT_CATS.concat(MAT_CATS.includes(m.cat) || !m.cat ? [] : [m.cat]).map(c => `<option ${c === m.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-    <div class="row"><div class="grow"><label>購入量</label><input id="aAmt" type="number" inputmode="decimal" value="${m.amount}" placeholder="700" oninput="updMat()"></div>
-      <div style="width:90px"><label>単位</label><select id="aUnit" onchange="updMat()">${UNITS.map(u => `<option ${u === m.unit ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
-    <label>購入価格（円）</label><input id="aPrice" type="number" inputmode="numeric" value="${m.price}" placeholder="2800" oninput="updMat()">
+    <div class="row"><div style="width:90px"><label>入れ物</label><select id="aBox" onchange="updMat()">${BOXES.concat(BOXES.includes(m.box) ? [] : [m.box]).map(b => `<option ${b === m.box ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></div>
+      <div class="grow"><label>1つの量</label><input id="aAmt" type="number" inputmode="decimal" value="${m.amount}" placeholder="700" oninput="updMat()"></div>
+      <div style="width:80px"><label>単位</label><select id="aUnit" onchange="updMat()">${UNITS.map(u => `<option ${u === m.unit ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+    <label>1つの値段（円）</label><input id="aPrice" type="number" inputmode="numeric" value="${m.price}" placeholder="2800" oninput="updMat()">
+    <label>発注の目安（残りがこの数以下で知らせる。空なら知らせない）</label><input id="aReorder" type="number" inputmode="decimal" step="0.1" value="${m.reorder}" placeholder="例：1">
     <div class="card num" id="aOut" style="margin-top:12px"></div>
     <button class="btn wide" onclick="saveMat('${id || ''}')">保存する</button>
     ${id ? `<button class="btn del wide" style="margin-top:8px" onclick="delMat('${id}')">削除</button>` : ''}`);
@@ -583,8 +668,10 @@ function updMat() {
   $('#aOut').innerHTML = html;
 }
 async function saveMat(id) {
-  const m = { id, name: $('#aName').value.trim(), cat: $('#aCat').value, amount: Number($('#aAmt').value), unit: $('#aUnit').value, price: Number($('#aPrice').value) || 0 };
-  if (!m.name || !(m.amount > 0)) return alert('名前と購入量を入れてください');
+  const r = $('#aReorder').value.trim();
+  const m = { id, name: $('#aName').value.trim(), cat: $('#aCat').value, amount: Number($('#aAmt').value), unit: $('#aUnit').value, price: Number($('#aPrice').value) || 0,
+    box: $('#aBox').value, reorder: r === '' ? '' : Number(r) };
+  if (!m.name || !(m.amount > 0)) return alert('名前と1つの量を入れてください');
   D = await call('saveMaterial', m); closeModal(); render(); toast('保存しました（メニューの原価にも反映）');
 }
 async function delMat(id) {
